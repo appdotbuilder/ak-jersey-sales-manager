@@ -1,79 +1,9 @@
+import { db } from '../db';
+import { shopSettingsTable, customersTable, transactionsTable, couriersTable } from '../db/schema';
 import { type ShopSettings, type UpdateShopSettingsInput } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function getShopSettings(): Promise<ShopSettings> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is fetching current shop settings.
-    // Should return default settings if no settings exist in database.
-    return Promise.resolve({
-        id: 1,
-        shop_name: 'AK Jersey',
-        shop_address: '',
-        shop_phone: '',
-        receipt_template: '',
-        created_at: new Date(),
-        updated_at: new Date()
-    } as ShopSettings);
-}
-
-export async function updateShopSettings(input: UpdateShopSettingsInput): Promise<ShopSettings> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is updating shop settings configuration.
-    // Should update the updated_at timestamp automatically.
-    return Promise.resolve({
-        id: 1,
-        shop_name: input.shop_name || 'AK Jersey',
-        shop_address: input.shop_address || '',
-        shop_phone: input.shop_phone || '',
-        receipt_template: input.receipt_template || '',
-        created_at: new Date(),
-        updated_at: new Date()
-    } as ShopSettings);
-}
-
-export async function exportCustomersToExcel(): Promise<Buffer> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is exporting customer database to Excel format.
-    // Should create a tidy and organized Excel file with all customer data.
-    return Promise.resolve(Buffer.from(''));
-}
-
-export async function exportOrdersToExcel(): Promise<Buffer> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is exporting order/transaction database to Excel format.
-    // Should create a tidy and organized Excel file with all order data including relations.
-    return Promise.resolve(Buffer.from(''));
-}
-
-export async function getReceiptTemplate(): Promise<string> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is fetching the current receipt template for editing.
-    return Promise.resolve('');
-}
-
-export async function updateReceiptTemplate(template: string): Promise<ShopSettings> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is updating the receipt template in shop settings.
-    return Promise.resolve({
-        id: 1,
-        shop_name: 'AK Jersey',
-        shop_address: '',
-        shop_phone: '',
-        receipt_template: template,
-        created_at: new Date(),
-        updated_at: new Date()
-    } as ShopSettings);
-}
-
-export async function initializeDefaultSettings(): Promise<ShopSettings> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is creating default shop settings if none exist.
-    // Should be called on application startup to ensure settings table has data.
-    return Promise.resolve({
-        id: 1,
-        shop_name: 'AK Jersey',
-        shop_address: '',
-        shop_phone: '',
-        receipt_template: `
+const DEFAULT_RECEIPT_TEMPLATE = `
 {{shop_name}}
 {{shop_address}}
 {{shop_phone}}
@@ -91,8 +21,120 @@ Payment: {{payment_method}}
 {{#courier}}Courier: {{courier_name}}{{/courier}}
 ================================
 Thank you for your order!
-        `.trim(),
-        created_at: new Date(),
-        updated_at: new Date()
-    } as ShopSettings);
+`.trim();
+
+export async function getShopSettings(): Promise<ShopSettings> {
+  try {
+    const settings = await db.select()
+      .from(shopSettingsTable)
+      .limit(1)
+      .execute();
+
+    if (settings.length === 0) {
+      // Initialize default settings if none exist
+      return await initializeDefaultSettings();
+    }
+
+    return settings[0];
+  } catch (error) {
+    console.error('Failed to get shop settings:', error);
+    throw error;
+  }
+}
+
+export async function updateShopSettings(input: UpdateShopSettingsInput): Promise<ShopSettings> {
+  try {
+    // First, try to get existing settings
+    const existingSettings = await db.select()
+      .from(shopSettingsTable)
+      .limit(1)
+      .execute();
+
+    if (existingSettings.length === 0) {
+      // Create new settings if none exist
+      const result = await db.insert(shopSettingsTable)
+        .values({
+          shop_name: input.shop_name || 'AK Jersey',
+          shop_address: input.shop_address || '',
+          shop_phone: input.shop_phone || '',
+          receipt_template: input.receipt_template || DEFAULT_RECEIPT_TEMPLATE,
+          updated_at: new Date()
+        })
+        .returning()
+        .execute();
+
+      return result[0];
+    } else {
+      // Update existing settings
+      const result = await db.update(shopSettingsTable)
+        .set({
+          ...(input.shop_name !== undefined && { shop_name: input.shop_name }),
+          ...(input.shop_address !== undefined && { shop_address: input.shop_address }),
+          ...(input.shop_phone !== undefined && { shop_phone: input.shop_phone }),
+          ...(input.receipt_template !== undefined && { receipt_template: input.receipt_template }),
+          updated_at: new Date()
+        })
+        .where(eq(shopSettingsTable.id, existingSettings[0].id))
+        .returning()
+        .execute();
+
+      return result[0];
+    }
+  } catch (error) {
+    console.error('Failed to update shop settings:', error);
+    throw error;
+  }
+}
+
+export async function getReceiptTemplate(): Promise<string> {
+  try {
+    const settings = await getShopSettings();
+    return settings.receipt_template;
+  } catch (error) {
+    console.error('Failed to get receipt template:', error);
+    throw error;
+  }
+}
+
+export async function updateReceiptTemplate(template: string): Promise<ShopSettings> {
+  try {
+    return await updateShopSettings({ receipt_template: template });
+  } catch (error) {
+    console.error('Failed to update receipt template:', error);
+    throw error;
+  }
+}
+
+export async function initializeDefaultSettings(): Promise<ShopSettings> {
+  try {
+    const result = await db.insert(shopSettingsTable)
+      .values({
+        shop_name: 'AK Jersey',
+        shop_address: '',
+        shop_phone: '',
+        receipt_template: DEFAULT_RECEIPT_TEMPLATE
+      })
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Failed to initialize default settings:', error);
+    throw error;
+  }
+}
+
+// Placeholder implementations for Excel export functions
+export async function exportCustomersToExcel(): Promise<Buffer> {
+  // This would require additional dependencies like exceljs
+  // For now, return empty buffer as placeholder
+  console.warn('Excel export not implemented - requires additional dependencies');
+  return Buffer.from('');
+}
+
+export async function exportOrdersToExcel(): Promise<Buffer> {
+  // This would require additional dependencies like exceljs
+  // For now, return empty buffer as placeholder
+  console.warn('Excel export not implemented - requires additional dependencies');
+  return Buffer.from('');
 }
